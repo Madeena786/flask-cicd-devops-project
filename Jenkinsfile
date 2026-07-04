@@ -2,10 +2,9 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "ap-south-2"
-        AWS_ACCOUNT_ID = "627807502425"
-        ECR_REPO = "flask_devops_app"
-        IMAGE_TAG = "latest"
+        AWS_REGION = 'ap-south-2'
+        ECR_REPO = '627807502425.dkr.ecr.ap-south-2.amazonaws.com/flask_devops_app'
+        EC2_HOST = '40.192.18.137'
     }
 
     stages {
@@ -18,9 +17,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh '''
-                docker build -t flask-app .
-                '''
+                sh 'docker build -t flask-app .'
             }
         }
 
@@ -28,41 +25,42 @@ pipeline {
             steps {
                 sh '''
                 aws ecr get-login-password --region $AWS_REGION | \
-                docker login --username AWS \
-                --password-stdin \
-                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+                docker login --username AWS --password-stdin 627807502425.dkr.ecr.ap-south-2.amazonaws.com
                 '''
             }
         }
 
         stage('Tag Docker Image') {
             steps {
-                sh '''
-                docker tag flask-app:$IMAGE_TAG \
-                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
-                '''
+                sh 'docker tag flask-app:latest $ECR_REPO:latest'
             }
         }
 
         stage('Push Docker Image') {
             steps {
-                sh '''
-                docker push \
-                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
-                '''
+                sh 'docker push $ECR_REPO:latest'
             }
         }
 
-        stage('Deploy Locally') {
+        stage('Deploy to EC2') {
             steps {
                 sh '''
-                docker stop flask-container || true
-                docker rm flask-container || true
+                ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
 
-                docker run -d \
-                --name flask-container \
-                -p 5000:5000 \
-                flask-app:latest
+                aws ecr get-login-password --region ap-south-2 | \
+                sudo docker login --username AWS --password-stdin 627807502425.dkr.ecr.ap-south-2.amazonaws.com
+
+                sudo docker pull 627807502425.dkr.ecr.ap-south-2.amazonaws.com/flask_devops_app:latest
+
+                sudo docker stop flask-container || true
+                sudo docker rm flask-container || true
+
+                sudo docker run -d \
+                  --name flask-container \
+                  -p 5000:5000 \
+                  627807502425.dkr.ecr.ap-south-2.amazonaws.com/flask_devops_app:latest
+
+                EOF
                 '''
             }
         }
@@ -70,7 +68,7 @@ pipeline {
 
     post {
         success {
-            echo 'Pipeline executed successfully!'
+            echo 'Pipeline executed successfully! Application deployed to EC2.'
         }
 
         failure {
