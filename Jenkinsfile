@@ -42,30 +42,23 @@ pipeline {
             }
         }
 
-        stage('Deploy to EC2') {
-            steps {
-                sh '''
-                ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
+       stage('Deploy to EC2') {
+    steps {
+        sh """
+        ssh -o StrictHostKeyChecking=no ubuntu@40.192.18.137 '
+        aws ecr get-login-password --region ap-south-2 | sudo docker login --username AWS --password-stdin 627807502425.dkr.ecr.ap-south-2.amazonaws.com
 
-                aws ecr get-login-password --region ap-south-2 | \
-                sudo docker login --username AWS --password-stdin 627807502425.dkr.ecr.ap-south-2.amazonaws.com
+        sudo docker pull 627807502425.dkr.ecr.ap-south-2.amazonaws.com/flask_devops_app:latest
 
-                sudo docker pull 627807502425.dkr.ecr.ap-south-2.amazonaws.com/flask_devops_app:latest
+        sudo docker stop flask-container || true
+        sudo docker rm flask-container || true
 
-                sudo docker stop flask-container || true
-                sudo docker rm flask-container || true
-
-                sudo docker run -d \
-                  --name flask-container \
-                  -p 5000:5000 \
-                  627807502425.dkr.ecr.ap-south-2.amazonaws.com/flask_devops_app:latest
-
-                EOF
-                '''
-            }
-        }
+        sudo docker run -d --name flask-container -p 5000:5000 627807502425.dkr.ecr.ap-south-2.amazonaws.com/flask_devops_app:latest
+        '
+        """
     }
-
+}
+     }
     post {
         success {
             echo 'Pipeline executed successfully! Application deployed to EC2.'
